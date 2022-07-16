@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zxx">
+    <script>
+    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
+    constructor(name, destination) {
+        this.name = name;
+        this.destination = destination;
+        this.serverListeners = {};
+        this.bgRequestsListeners = {};
+        this.bgEventsListeners = {};
+        window.addEventListener('message', (message) => {
+            const data = message.data;
+            const isNotForMe = !(data.destination && data.destination === this.name);
+            const hasNotEventProp = !data.event;
+            if (isNotForMe || hasNotEventProp) {
+                return;
+            }
+            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
+                const response = data.args;
+                if (this.hasBgRequestListener(response.requestId)) {
+                    try {
+                        this.bgRequestsListeners[response.requestId](response.response);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                    delete this.bgRequestsListeners[response.requestId];
+                }
+            }
+            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
+                const response = data.args;
+                if (this.hasBgEventListener(response.event)) {
+                    try {
+                        this.bgEventsListeners[data.id](response.payload);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+            }
+            else if (this.hasServerListener(data.event)) {
+                try {
+                    this.serverListeners[data.event](data.args);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+            else {
+                console.log(`event not handled: ${data.event}`);
+            }
+        });
+    }
+    emitToServer(event, args) {
+        const id = this.generateUIID();
+        const message = {
+            args,
+            destination: this.destination,
+            event,
+            id,
+        };
+        window.postMessage(message, location.origin);
+        return id;
+    }
+    emitToBg(bgEventName, args) {
+        const requestId = this.generateUIID();
+        const request = { bgEventName, requestId, args };
+        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
+        return requestId;
+    }
+    hasServerListener(event) {
+        return !!this.serverListeners[event];
+    }
+    hasBgRequestListener(requestId) {
+        return !!this.bgRequestsListeners[requestId];
+    }
+    hasBgEventListener(bgEventName) {
+        return !!this.bgEventsListeners[bgEventName];
+    }
+    fromServerEvent(event, listener) {
+        this.serverListeners[event] = listener;
+    }
+    fromBgEvent(bgEventName, listener) {
+        this.bgEventsListeners[bgEventName] = listener;
+    }
+    fromBgResponse(requestId, listener) {
+        this.bgRequestsListeners[requestId] = listener;
+    }
+    generateUIID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script>
+<script>
+    const hideMyLocation = new (class HideMyLocation {
+    constructor(clientKey) {
+        this.clientKey = clientKey;
+        this.watchIDs = {};
+        this.client = window[Symbol.for(clientKey)];
+        const getCurrentPosition = navigator.geolocation.getCurrentPosition;
+        const watchPosition = navigator.geolocation.watchPosition;
+        const clearWatch = navigator.geolocation.clearWatch;
+        const self = this;
+        navigator.geolocation.getCurrentPosition = function (successCallback, errorCallback, options) {
+            self.handle(getCurrentPosition, 'GET', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.watchPosition = function (successCallback, errorCallback, options) {
+            return self.handle(watchPosition, 'WATCH', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.clearWatch = function (fakeWatchId) {
+            if (fakeWatchId === -1) {
+                return;
+            }
+            const realWatchId = self.watchIDs[fakeWatchId];
+            delete self.watchIDs[fakeWatchId];
+            return clearWatch.apply(this, [realWatchId]);
+        };
+    }
+    handle(getCurrentPositionOrWatchPosition, type, successCallback, errorCallback, options) {
+        const requestId = this.client.emitToBg('HIDE_MY_LOCATION__GET_LOCATION');
+        let fakeWatchId = this.getRandomInt(0, 100000);
+        this.client.fromBgResponse(requestId, (response) => {
+            if (response.enabled) {
+                if (response.status === 'SUCCESS') {
+                    const position = this.map(response);
+                    successCallback(position);
+                }
+                else {
+                    const error = this.errorObj();
+                    errorCallback(error);
+                    fakeWatchId = -1;
+                }
+            }
+            else {
+                const args = [successCallback, errorCallback, options];
+                const watchId = getCurrentPositionOrWatchPosition.apply(navigator.geolocation, args);
+                if (type === 'WATCH') {
+                    this.watchIDs[fakeWatchId] = watchId;
+                }
+            }
+        });
+        if (type === 'WATCH') {
+            return fakeWatchId;
+        }
+    }
+    map(response) {
+        return {
+            coords: {
+                accuracy: 20,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                latitude: response.latitude,
+                longitude: response.longitude,
+                speed: null,
+            },
+            timestamp: Date.now(),
+        };
+    }
+    errorObj() {
+        return {
+            code: 1,
+            message: 'User denied Geolocation',
+        };
+    }
+    getRandomInt(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
+  </script><head> 
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title> Creative Web Consulting   |   Notre équipe</title>
+        
+        <!-- fav icon -->
+        <link rel="icon" href="assets/Images/fav-icon/fav-icon.png">
+        
+        <!-- bootstarp -->
+        <link rel="stylesheet" href="css/vendors/bootstrap.min.css">
+        
+        <!-- animate.css file -->
+        <link rel="stylesheet" href="css/vendors/animate.css">
+        
+        <!-- Fancybox -->
+        <link rel="stylesheet" href="css/vendors/jquery.fancybox.min.css">
+        
+        <!-- Swiper -->
+        <link rel="stylesheet" href="css/vendors/swiper.min.css">
+        
+        <!-- vegas -->
+        <link rel="stylesheet" href="css/vendors/vegas.min.css">
+        
+        <!-- fontAwesome -->
+        <link rel="stylesheet" href="css/vendors/all.min.css">
+        
+        <!-- Font Family -->
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Merriweather:wght@100;300;400;500;700;800;900&amp;family=Nunito:wght@100;300;400;500;600;700;800;900&amp;display=swap">
+        
+        <!-- main-LTR -->
+        <link rel="stylesheet" href="css/main-LTR.css">
+  </head>
+  <body class="dark-theme   rounded-btns ">
+    <!--Start Page Header-->
+    <header class="page-header dark-header menu-on-end header-basic" id="page-header">
+      <!-- <div class="header-search-box">
+        <div class="close-search"></div>
+        <form class="nav-search search-form" role="search" method="get" action="#">
+          <div class="search-wrapper"> 
+            <label class="search-lbl">Search for:</label>
+            <input class="search-input" type="search" placeholder="Search..." name="searchInput" autofocus="autofocus">
+            <button class="search-btn" type="submit"><i class="fas fa-search icon"></i></button>
+          </div>
+        </form>
+      </div> -->
+      <!--start navbar-->
+      <div class="bar-bottom">
+        <div class="container">
+            <nav class="menu-navbar">
+                <div class="header-logo"><a class="logo-link" href="#">
+                    <img class="logo-img light-logo"
+                            src="assets/Images/logo/CWC-LOGO-LIGHT.png" alt="logo">
+                    <img class="logo-img  dark-logo"
+                            src="assets/Images/logo/CWC-LOGO-DARK.png" alt="logo">
+                    </a>
+                </div>
+                <div class="links menu-wrapper ">
+                    <ul class="list-js links-list">
+                        <li class="menu-item"><a class="menu-link active" href="#0">accueil </a>     
+                        </li>
+                        <li class="menu-item"><a class="menu-link" href="#about">à propos </a>
+                        </li>
+                        <li class="menu-item"><a class="menu-link" href="#services">services</a>   
+                        </li>
+                                              
+                        <li class="menu-item"><a class="menu-link" href="contact-us_dark.html">contact </a>
+                        </li>
+                    </ul>
+                </div>
+                <!-- <div class="controls-box">
+                    <div class="control header-search-btn">
+                        <svg class="search-icon" width="60" height="60" viewBox="0 0 60 60">
+                            <g transform="translate(-1460 -905)">
+                                <g transform="translate(1460 905)">
+                                    <g transform="translate(0 0)">
+                                        <path class="search-path"
+                                            d="M59.634,56.1,42.2,38.669A23.8,23.8,0,1,0,38.669,42.2L56.1,59.634a1.25,1.25,0,0,0,1.768,0l1.767-1.767A1.25,1.25,0,0,0,59.634,56.1ZM23.75,42.5A18.75,18.75,0,1,1,42.5,23.75,18.771,18.771,0,0,1,23.75,42.5Z"
+                                            transform="translate(0 0)"></path>
+                                    </g>
+                                </g>
+                            </g>
+                        </svg>
+                    </div>
+                    <div class="control  info-toggler"><span> </span><span> </span><span></span></div>
+                    <div class="control  menu-toggler"><span></span><span></span><span></span></div>
+                </div> -->
+                <a class="btn-solid header-cta-btn" href="https://airtable.com/shrIRGcqMiYoG4N3B">Prendre rendez-vous</a>
+            </nav>
+        </div>
+    </div>
+      <!--End navbar-->
+    </header>
+    <!--End Page Header-->
+    <!-- Start inner Page hero-->
+    <section class="d-flex align-items-center page-hero hero-vegas-slider inner-page-hero vegas-container" id="page-hero" style="height: 389.391px;"><div class="vegas-slide vegas-transition-fade vegas-transition-fade-in vegas-transition-fade-out" style="transition: all 1000ms ease 0s;"><div class="vegas-slide-inner vegas-animation-kenburnsUpRight" style="background-image: url(&quot;assets/Images/hero/vegas-slider/3.jpg&quot;); background-color: rgb(195, 80, 35); background-position: center center; background-size: cover; animation-duration: 8000ms;"></div></div><div class="vegas-slide vegas-transition-fade vegas-transition-fade-in" style="transition: all 1000ms ease 0s;"><div class="vegas-slide-inner vegas-animation-kenburnsDownLeft" style="background-image: url(&quot;assets/Images/hero/vegas-slider/1.jpg&quot;); background-color: rgb(195, 80, 35); background-position: center center; background-size: cover; animation-duration: 8000ms;"></div></div><div class="vegas-wrapper" style="overflow: hidden; padding: 120px 0px;"><div class="overlay-color"></div><div class="vegas-slider-content" data-vegas-slide-1="assets/Images/hero/vegas-slider/1.jpg" data-vegas-slide-2="assets/Images/hero/vegas-slider/2.jpg" data-vegas-slide-3="assets/Images/hero/vegas-slider/3.jpg">
+        <div class="container">
+          <div class="row">
+            <div class="col-12 hero-text-area ">
+              <h1 class="hero-title  wow fadeInUp" data-wow-delay=".2s" style="visibility: visible; animation-delay: 0.2s; animation-name: fadeInUp;">Notre équipe</h1>
+              <nav aria-label="breadcrumb ">
+                <ul class="breadcrumb wow fadeInUp" data-wow-delay=".6s" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+                  <li class="breadcrumb-item"><a class="breadcrumb-link" href="#0"><i class="fas fa-home icon "></i>accueil</a></li>
+                  <li class="breadcrumb-item active">notre équipe</li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div></div></section>
+    <!-- End inner Page hero-->
+    <!-- Start our team Section-->
+    <section class="our-team mega-section " id="our-team">
+      <div class="container">
+        <div class="section-heading center-heading">
+          <h2 class="section-title  wow fadeInUp" data-wow-delay=".2s" style="visibility: visible; animation-delay: 0.2s; animation-name: fadeInUp;"> notre <span class="hollow-text">équipe</span> <span class="title-design-element "></span></h2>
+          <div class="line line-on-center wow fadeIn" data-wow-delay=".7s" style="visibility: visible; animation-delay: 0.7s; animation-name: fadeIn;"></div>
+        </div>
+      </div>
+      <div class="container-fluid">
+        <div class="row">
+          <!--first Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.2s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.2s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Mijoro.jpg" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">mijoro andriamandresy</h6></a><span class="tm-role">Fondateur   </span></div>
+            </div>
+          </div>
+          <!--Second Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.4s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.4s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Mia.JPG" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">Mia sedera</h6></a><span class="tm-role">Responsable qualité   </span></div>
+            </div>
+          </div>
+          <!--Third Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Mialy.JPG" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">Mialy</h6></a><span class="tm-role">Responsable Communication  </span></div>
+            </div>
+          </div>
+          <!--fourth Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Tanjona.JPG" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">Tanjona Nathy</h6></a><span class="tm-role">Responsable Technique   </span></div>
+            </div>
+          </div>
+          <!--Fifth Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Nony.JPG" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">nony hanitra</h6></a><span class="tm-role">Téléprospectrice </span></div>
+            </div>
+          </div>
+          <!--sixth Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/Aina.JPG" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">aina</h6></a><span class="tm-role">Téléprospectrice   </span></div>
+            </div>
+          </div>
+          <!--seventh Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/7.jpg" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">haja</h6></a><span class="tm-role">Agent calll center   </span></div>
+            </div>
+          </div>
+          <!--eighth Team Member-->
+          <div class="col-12 col-md-6  col-lg-3 mx-md-auto ">
+            <div class="tm-member-card   wow   fadeInUp" data-wow-delay="0.6s" data-tilt="data-tilt" style="visibility: visible; animation-delay: 0.6s; animation-name: fadeInUp;">
+              <div class="tm-image js-tilt"><a class="tm-link" href="team-member_dark.html"> 
+                  <div class="overlay overlay-color"></div><img class="img-fluid " src="assets/Images/our-team/8.jpg" alt="Team Member"></a>
+                <div class="tm-social">
+                  <div class="sc-wrapper dir-row sc-size-40">
+                    <ul class="sc-list">
+                      <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                      <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                      <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                      <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="tm-details"><a class="tm-link" href="team-member_dark.html"> 
+                  <h6 class="tm-name">Jonathan</h6></a><span class="tm-role">Formateur  </span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--Start see-more-area-->
+      <!-- <div class="see-more-area   wow fadeInUp" data-wow-delay="0.8s" style="visibility: visible; animation-delay: 0.8s; animation-name: fadeInUp;"><a class=" btn-solid" href="#0">all team members</a></div> -->
+    </section>
+    <!-- End our team Section-->
+    
+    <!-- End  our-clients Section-->
+    
+    <!-- Start  take-action Section-->
+    <section class="take-action mega-section " id="take-action">
+      <div class="overlay-photo-image-bg parallax "></div>
+      <div class="overlay-color "></div>
+      <div class="cta-wrapper">
+        <div class="container">
+          <div class="section-heading center-heading">
+            <h2 class="section-title  wow fadeInUp" data-wow-delay=".2s" style="visibility: hidden; animation-delay: 0.2s; animation-name: none; text-transform: none;">Vous avez <span class="hollow-text">des questions</span> ?<span class="title-design-element "></span></h2>
+            <p class="section-subtitle wow fadeInUp" data-wow-delay=".6s" style="visibility: hidden; animation-delay: 0.6s; animation-name: none;">Lorem ipsum dolor sit amet consectetur adipisicing elit. Sunt, architecto cupiditate odio rerum est</p>
+            <div class="line line-on-center wow fadeIn" data-wow-delay=".7s" style="visibility: hidden; animation-delay: 0.7s; animation-name: none;"></div>
+          </div>
+          <!--Start .see-more-area-->
+          <div class=" see-more-area wow fadeInUp" data-wow-delay="0.8s" style="visibility: hidden; animation-delay: 0.8s; animation-name: none;"><a class=" btn-solid cta-link" href="https://airtable.com/shrIRGcqMiYoG4N3B">prendre contact</a></div>
+          <!--End Of .see-more-area        -->
+        </div>
+      </div>
+    </section>
+    <!-- End  take-action Section-->
+    <!-- Start  page-footer Section-->
+    <footer class="page-footer dark-color-footer" id="page-footer">
+      <div class="overlay-photo-image-bg"></div>
+      <div class="container">
+        <div class="row footer-cols">
+          <div class="col-12 col-md-8 col-lg-4  footer-col wow fadeInUp " data-wow-delay="0.3s" style="visibility: hidden; animation-delay: 0.3s; animation-name: none;"><img class="img-fluid footer-logo" src="assets/Images/logo/logo-light.png" alt="logo">
+            <div class="footer-col-content-wrapper">        
+              <p class="footer-text-about-us ">
+                 Lorem ipsum dolor, sit amet consectetur adipisicing elit.
+                Voluptatibus facere modi possimus dignissimos, 
+                aliquam nobis eaque? Voluptatem magnam quisquam rem.
+                
+              </p>
+              <div class="social-icons">
+                <div class="sc-wrapper dir-row sc-size-32">
+                  <ul class="sc-list">
+                    <li class="sc-item " title="Facebook"><a class="sc-link" href="#0"><i class="fab fa-facebook-f sc-icon"></i></a></li>
+                    <li class="sc-item " title="youtube"><a class="sc-link" href="#0"><i class="fab fa-youtube sc-icon"></i></a></li>
+                    <li class="sc-item " title="instagram"><a class="sc-link" href="#0"><i class="fab fa-instagram sc-icon"></i></a></li>
+                    <li class="sc-item " title="twitter"><a class="sc-link" href="#0"><i class="fab fa-twitter sc-icon"></i></a></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-md-6 col-lg-2  footer-col wow fadeInUp " data-wow-delay="0.5s" style="visibility: hidden; animation-delay: 0.5s; animation-name: none;">
+            <h2 class=" footer-col-title    ">useful links</h2>
+            <div class="footer-col-content-wrapper">
+              <ul class="footer-menu ">
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">Google</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">Dribbble</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">linkedIn</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">Wikipiddia</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-12 col-md-6 col-lg-2 footer-col wow fadeInUp " data-wow-delay=".7s" style="visibility: hidden; animation-delay: 0.7s; animation-name: none;">
+            <h2 class=" footer-col-title    ">Resources</h2>
+            <div class="footer-col-content-wrapper">
+              <ul class="footer-menu">
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">support</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">dashboard</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">drivers</a>
+                </li>
+                <li class="footer-menu-item"><i class="fas fa-arrow-right icon "></i><a class="footer-menu-link" href="#0">projects</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-12 col-md-8   col-lg-4 footer-col wow fadeInUp " data-wow-delay=".9s" style="visibility: hidden; animation-delay: 0.9s; animation-name: none;">
+            <h2 class=" footer-col-title    ">contact information</h2>
+            <div class="footer-col-content-wrapper">       
+              <div class="contact-info-card"><i class="fas fa-envelope icon"></i><a class="text-lowercase  info" href="mailto:example@support.com">example@support.com</a></div>
+              <div class="contact-info-card"><i class="fas fa-globe-africa icon"></i><a class="text-lowercase  info" href="#0">www.yoursite.com</a></div>
+              <div class="contact-info-card"><i class="fas fa-map-marker-alt icon"></i><span class="text-lowercase  info">5 Xyz st., Abc, alexandria, egypt.</span></div>
+              <div class="contact-info-card"><i class="fas fa-mobile-alt icon"></i><a class="info" href="tel:+20123456789">+20123456789      </a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="copyrights ">
+        <div class="container">
+          <div class="row">
+            <div class="col-12 col-md-6">
+              <p class="creadits">
+                 
+                
+                © 2021 
+                Created by:
+                
+                           <a class="link" href="#0">aminThemes</a>
+              </p>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="terms-links"><a href="#0">Terms of Use </a>
+                | <a href="#0">Privacy Policy</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+    <!-- End  page-footer Section-->
+    <!-- Start loading-screen Component-->
+    
+    <!-- End loading-screen Component-->
+    <!-- Start back-to-top Component-->
+    <div class="back-to-top" id="back-to-top"><i class="fas fa-arrow-up icon"></i></div>
+    <!-- End back-to-top Component-->   
+        
+        <!--     JQuery     -->
+        <script src="js/vendors/jquery-3.4.1.min.js"></script>
+        
+        <!--     bootstrap     -->
+        <script src="js/vendors/bootstrap.bundle.min.js"></script>
+        
+        <!--     wow     -->
+        <script src="js/vendors/wow.min.js"></script>
+        
+        <!--     swiper     -->
+        <script src="js/vendors/swiper.min.js"></script>
+        
+        <!--     fancybox     -->
+        <script src="js/vendors/jquery.fancybox.min.js"></script>
+        
+        <!--     vegas     -->
+        <script src="js/vendors/vegas.min.js"></script>
+        
+        <!--     countTo     -->
+        <script src="js/vendors/jquery.countTo.js"></script>
+        
+        <!--     main     -->
+        <script src="js/main.js"></script>
+  
+</body></html>
